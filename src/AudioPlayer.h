@@ -7,9 +7,9 @@
 
 #define MAX98357_I2S_NUM  I2S_NUM_0
 #define SAMPLE_RATE       16000
-#define MAX98357_DOUT     38
-#define MAX98357_LRC      40
-#define MAX98357_BCLK     39
+#define MAX98357_DOUT     7
+#define MAX98357_LRC      16
+#define MAX98357_BCLK     15
 
 struct PlayAudioTask {
     size_t length;
