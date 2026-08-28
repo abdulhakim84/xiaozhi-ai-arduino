@@ -1,10 +1,11 @@
 #include "Display.h"
 #include <Wire.h>
 
-// Definisi variabel statis
+// Inisialisasi variabel statis
 Adafruit_SSD1306 Display::display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 String Display::currentStatus = "Standby";
 String Display::chatMessage = "";
+String Display::currentTime = "--:--";
 
 void Display::begin(int sdaPin, int sclPin) {
     if (sdaPin != -1 && sclPin != -1) {
@@ -39,9 +40,9 @@ void Display::showChatMessage(const String& role, const String& text) {
     render();
 }
 
-void Display::clear() {
-    display.clearDisplay();
-    display.display();
+void Display::updateTime(const char* timeStr) {
+    currentTime = String(timeStr);
+    render();
 }
 
 void Display::setBrightness(int percentage) {
@@ -50,25 +51,32 @@ void Display::setBrightness(int percentage) {
     display.ssd1306_command(contrast);
 }
 
+void Display::clear() {
+    display.clearDisplay();
+    display.display();
+}
+
 void Display::render() {
     display.clearDisplay();
 
-    // 1. Header Bar
+    // 1. Header Bar (Judul & Jam)
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0, 0);
     display.print("Xiaozhi AI");
+    
+    display.setCursor(95, 0);
+    display.print(currentTime); // Menampilkan jam "HH:MM"
     display.drawLine(0, 9, 128, 9, SSD1306_WHITE);
 
-    // 2. Status utama
+    // 2. Teks Status Utama
     display.setCursor(0, 15);
     display.print("Status: ");
     display.println(currentStatus);
 
-    // 3. Sub-teks / Pesan Chat (jika ada)
+    // 3. Pesan Chat
     if (chatMessage.length() > 0) {
         display.setCursor(0, 35);
-        // Potong string jika terlalu panjang agar tidak overflow layar
         String truncatedMsg = chatMessage.substring(0, 40); 
         display.println(truncatedMsg);
     }
