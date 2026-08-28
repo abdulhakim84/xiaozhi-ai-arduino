@@ -1,6 +1,6 @@
 #ifndef XIAOZHI_AI_ARDUINO_WIFIMANAGER_H
 #define XIAOZHI_AI_ARDUINO_WIFIMANAGER_H
-#include "misc/lv_types.h"
+
 #include <string>
 
 class WiFiManager {
@@ -14,6 +14,5 @@ public:
     static bool isConnectingWifi;
     static int connectRetries;
 };
-
 
 #endif //XIAOZHI_AI_ARDUINO_WIFIMANAGER_H
