@@ -6,7 +6,7 @@
 #include "Utils.h"
 #include "Settings.h"
 #include "GlobalState.h"
-#include "LvglDisplay.h"
+#include "Display.h"
 #include "Application.h"
 #include "IOT.h"
 
@@ -37,6 +37,7 @@ void CozeLLMAgent::chat(const String &input) {
     http.begin("https://api.coze.cn/v3/chat?conversation_id=" + GlobalState::getConversationId());
     http.addHeader("Authorization", ("Bearer " + Settings::getCozeToken()).c_str());
     http.addHeader("Content-Type", "application/json");
+    
     // 构建请求体
     JsonDocument requestBody;
     requestBody.clear();
@@ -53,19 +54,16 @@ void CozeLLMAgent::chat(const String &input) {
     serializeJson(requestBody, requestBodyStr);
     const int httpResponseCode = http.POST(requestBodyStr.c_str());
     if (httpResponseCode > 0) {
-        // 开始调用智能体接口就创建TTS连接，提高语音合成相应速度
         Application::tts()->connect();
         String lastEvent;
         WiFiClient *stream = http.getStreamPtr();
         String line = "";
         while (stream->connected() || stream->available()) {
-            // 等待数据流有新的数据可读
             while (!stream->available()) {
                 vTaskDelay(pdMS_TO_TICKS(10));
             }
             line = stream->readStringUntil('\n');
             if (!line.isEmpty()) {
-                // 表示大模型回复已经完全结束
                 if (line.compareTo("event:conversation.message.completed") == 0
                     && lastEvent.compareTo("event:conversation.message.delta") == 0) {
                     ESP_LOGI(TAG, "====================大模型调用结束==================");
@@ -80,7 +78,6 @@ void CozeLLMAgent::chat(const String &input) {
                     }
                     break;
                 }
-                // 返回true表示强制终止
                 processStreamOutput(line);
                 if (line.startsWith("event:")) {
                     lastEvent = line;
@@ -89,13 +86,12 @@ void CozeLLMAgent::chat(const String &input) {
             vTaskDelay(pdMS_TO_TICKS(1));
         }
     } else {
-        ESP_LOGE(TAG, "请求智能体接口失败: %s", httpResponseCode);
+        ESP_LOGE(TAG, "请求智能体接口失败: %d", httpResponseCode);
     }
     http.end();
 }
 
 void CozeLLMAgent::processStreamOutput(String data) {
-    // 只处理data开头，并且是助手回答的数据类型
     if (!data.startsWith("data:") || data.indexOf(R"("role":"assistant","type":"answer")") < 0) {
         return;
     }
@@ -122,33 +118,28 @@ void CozeLLMAgent::reset() {
     _firstPacket = true;
 }
 
-// 处理增量消息
 void CozeLLMAgent::processContent(String &content) {
     if (content.isEmpty()) {
         return;
     }
     const int index = content.indexOf(DELIMITER);
-    // 如果不包含分隔符，状态不会发生变化
     if (index < 0) {
         processPart(content);
         content = "";
-    } else // 如果包含分隔符
-    {
+    } else {
         const String leftPart = content.substring(0, index);
         if (!leftPart.isEmpty()) {
             processPart(leftPart);
         }
-        // 再执行状态转移
         stateTransfer(_state, Delimiter);
         content = content.substring(index + 1);
-        processContent(content); // 然后递归处理右边部分
+        processContent(content);
     }
-    // 回复的内容里面包含一些可以断句的标点符号时，直接发送给TTS进行语音合成，降低响应延迟
+    
     while (true) {
         const std::pair<int, size_t> delimiterIndex = findMinIndexOfDelimiter(_ttsTextBuffer);
         if (delimiterIndex.first >= 0) {
-            Application::tts()->synth(_ttsTextBuffer.substring(0, delimiterIndex.first),
-                                      false);
+            Application::tts()->synth(_ttsTextBuffer.substring(0, delimiterIndex.first), false);
             _ttsTextBuffer = _ttsTextBuffer.substring(delimiterIndex.first + delimiterIndex.second);
         } else {
             break;
@@ -168,7 +159,10 @@ void CozeLLMAgent::processPart(const String &input) {
         case ParamsCompleted:
             _response += input;
             _ttsTextBuffer += input;
-            LvglDisplay::updateChatText(_firstPacket, _response.c_str());
+            
+            // Menampilkan jawaban AI di layar OLED SSD1306
+            Display::showChatMessage("AI", _response);
+            
             if (_firstPacket) {
                 _firstPacket = false;
             }
