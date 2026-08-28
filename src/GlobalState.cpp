@@ -1,14 +1,11 @@
 #include "GlobalState.h"
-#include "LvglDisplay.h"
+#include "Display.h"
 #include <utility>
 
 String GlobalState::conversationId = "";
 MachineState GlobalState::machineState = Sleep;
-String GlobalState::connectingWiFiMessage = "正在连网";
+String GlobalState::connectingWiFiMessage = "Menghubungkan WiFi";
 EventGroupHandle_t GlobalState::eventGroup = xEventGroupCreate();
-
-#define LIGHT_GREEN 0x55b79d
-#define RED 0xda4242
 
 void GlobalState::setConversationId(String conversationId) {
     GlobalState::conversationId = std::move(conversationId);
@@ -38,37 +35,38 @@ void GlobalState::setState(const MachineState state) {
     xEventGroupClearBits(eventGroup, xEventGroupGetBits(eventGroup));
     xEventGroupSetBits(eventGroup, 1 << state);
     machineState = state;
+
     switch (state) {
         case Sleep:
-            LvglDisplay::updateState("待命中...");
+            Display::updateState("Standby / Siaga");
             break;
         case NetworkConfigurationNotFound:
-            LvglDisplay::updateState("等待配网...");
+            Display::updateState("Menunggu WiFi Config");
             break;
         case NetworkConnecting:
-            LvglDisplay::updateState(connectingWiFiMessage.c_str());
-            connectingWiFiMessage = connectingWiFiMessage + ".";
-            if (connectingWiFiMessage.compareTo("正在连网....") == 0) {
-                connectingWiFiMessage = "正在连网";
+            connectingWiFiMessage += ".";
+            if (connectingWiFiMessage == "Menghubungkan WiFi....") {
+                connectingWiFiMessage = "Menghubungkan WiFi";
             }
+            Display::updateState(connectingWiFiMessage);
             break;
         case NetworkConnected:
-            LvglDisplay::updateState("连网成功");
+            Display::updateState("WiFi Terhubung");
             break;
         case NetworkConnectFailed:
-            LvglDisplay::updateState("连网失败");
+            Display::updateState("Gagal Koneksi WiFi");
             break;
         case Listening:
-            LvglDisplay::updateState("正在聆听...");
+            Display::updateState("Mendengarkan...");
             break;
         case Thinking:
-            LvglDisplay::updateState("正在思考...");
+            Display::updateState("Berpikir...");
             break;
         case Recognizing:
-            LvglDisplay::updateState("正在识别...");
+            Display::updateState("Mengenali Suara...");
             break;
         case Speaking:
-            LvglDisplay::updateState("正在说话...");
+            Display::updateState("Berbicara...");
             break;
         default:
             break;
