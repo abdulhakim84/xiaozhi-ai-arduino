@@ -3,10 +3,8 @@
 #include "Arduino.h"
 #include "GlobalState.h"
 #include "Settings.h"
-#include "lvgl.h"
-#include "LvglDisplay.h"
 #include "TimeUpdater.h"
-#include "ui/gui.h"
+#include "Display.h"
 
 static auto TAG = "WiFiManager";
 
@@ -32,14 +30,20 @@ void WiFiManager::setupWiFi() {
 
 void WiFiManager::setupWiFiWithAnim(const std::string &ssid, const std::string &password, int maxRetries) {
     auto *params = new WiFiSetupParams{ssid, password, maxRetries};
-    lv_timer_create([](lv_timer_t *timer) {
-        const auto *p = static_cast<WiFiSetupParams *>(lv_timer_get_user_data(timer));
-        const bool completed = setupWiFi(p->ssid.c_str(), p->password.c_str(), p->maxRetries);
-        if (completed) {
-            lv_timer_delete(timer);
-            lv_obj_add_flag(lv_ui.menu_network_page_keyboard_mask, LV_OBJ_FLAG_HIDDEN);
+    
+    // Mengganti lv_timer_create dengan FreeRTOS Task
+    xTaskCreate([](void *pvParameters) {
+        auto *p = static_cast<WiFiSetupParams *>(pvParameters);
+        while (true) {
+            const bool completed = WiFiManager::setupWiFi(p->ssid.c_str(), p->password.c_str(), p->maxRetries);
+            if (completed) {
+                break; // Hentikan loop jika koneksi sukses atau gagal total
+            }
+            vTaskDelay(pdMS_TO_TICKS(500)); // Delay polling 500ms
         }
-    }, 500, params);
+        delete p;
+        vTaskDelete(NULL); // Hapus task setelah selesai
+    }, "wifiConnectTask", 4096, params, 1, NULL);
 }
 
 bool WiFiManager::setupWiFi(const char *ssid, const char *password, int maxRetries) {
@@ -52,17 +56,17 @@ bool WiFiManager::setupWiFi(const char *ssid, const char *password, int maxRetri
         WiFi.begin(ssid, password);
         return false;
     }
+
     if (WiFiClass::status() == WL_CONNECTED) {
         ESP_LOGI(TAG, "WiFi连接成功: %s, %s", ssid, password);
         GlobalState::setState(NetworkConnected);
-        LvglDisplay::forbidSpeak(false);
-        lv_image_set_src(lv_ui.status_bar_wifi_image, LV_CUSTOM_SYMBOL_WIFI);
-        Settings::setWifiInfo(ssid, password); // 保存密码，下次直接连接
-        TimeUpdater::begin(); // 联网成功，启动时间更新任务
+        Settings::setWifiInfo(ssid, password); // Simpan kredensial WiFi
+        TimeUpdater::begin();                   // Jalankan sinkronisasi waktu NTP
         isConnectingWifi = false;
         connectRetries = 0;
         return true;
     }
+
     connectRetries++;
     if (WiFiClass::status() != WL_CONNECTED) {
         GlobalState::setState(NetworkConnecting);
@@ -70,8 +74,6 @@ bool WiFiManager::setupWiFi(const char *ssid, const char *password, int maxRetri
             ESP_LOGW(TAG, "WiFi连接超时");
             WiFi.disconnect(false, true);
             GlobalState::setState(NetworkConnectFailed);
-            LvglDisplay::forbidSpeak(true);
-            lv_image_set_src(lv_ui.status_bar_wifi_image, LV_CUSTOM_SYMBOL_NO_WIFI);
             isConnectingWifi = false;
             connectRetries = 0;
             return true;
