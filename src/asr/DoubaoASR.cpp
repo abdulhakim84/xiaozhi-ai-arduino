@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <RecordingManager.h>
 #include <vector>
-#include "LvglDisplay.h"
+#include "Display.h"
 #include "Application.h"
 #include "ArduinoJson.h"
 #include "GlobalState.h"
@@ -28,10 +28,10 @@ void DoubaoASR::eventCallback(WStype_t type, uint8_t *payload, size_t length) {
         case WStype_ERROR:
             break;
         case WStype_CONNECTED:
-            ESP_LOGD(TAG, "websocket连接成功");
+            ESP_LOGD(TAG, "websocket connection success");
             break;
         case WStype_DISCONNECTED:
-            ESP_LOGD(TAG, "websocket断开连接");
+            ESP_LOGD(TAG, "websocket disconnected");
             break;
         case WStype_TEXT: {
             break;
@@ -73,12 +73,12 @@ void DoubaoASR::buildFullClientRequest() {
     payload[payloadStr.length()] = '\0';
     std::vector<uint8_t> payloadSize = uint32ToUint8Array(payloadStr.length());
     _requestBuilder.clear();
-    // 先写入报头（四字节）
+    // Header (4 bytes)
     _requestBuilder.insert(_requestBuilder.end(), DoubaoTTSDefaultFullClientWsHeader,
                            DoubaoTTSDefaultFullClientWsHeader + sizeof(DoubaoTTSDefaultFullClientWsHeader));
-    // 写入payload长度（四字节）
+    // Payload length (4 bytes)
     _requestBuilder.insert(_requestBuilder.end(), payloadSize.begin(), payloadSize.end());
-    // 写入payload内容
+    // Payload content
     _requestBuilder.insert(_requestBuilder.end(), payload, payload + payloadStr.length());
 }
 
@@ -87,24 +87,19 @@ void DoubaoASR::buildAudioOnlyRequest(uint8_t *audio, const size_t size, const b
     std::vector<uint8_t> payloadLength = uint32ToUint8Array(size);
 
     if (lastPacket) {
-        // 先写入报头（四字节）
         _requestBuilder.insert(_requestBuilder.end(), DoubaoTTSDefaultLastAudioWsHeader,
                                DoubaoTTSDefaultLastAudioWsHeader + sizeof(DoubaoTTSDefaultLastAudioWsHeader));
     } else {
-        // 先写入报头（四字节）
         _requestBuilder.insert(_requestBuilder.end(), DoubaoTTSDefaultAudioOnlyWsHeader,
                                DoubaoTTSDefaultAudioOnlyWsHeader + sizeof(DoubaoTTSDefaultAudioOnlyWsHeader));
     }
 
-    // 写入payload长度（四字节）
     _requestBuilder.insert(_requestBuilder.end(), payloadLength.begin(), payloadLength.end());
-    // 写入payload内容
     _requestBuilder.insert(_requestBuilder.end(), audio, audio + size);
 }
 
 void DoubaoASR::recognize(DoubaoASRTask task) {
-    ESP_LOGD(TAG, "开始语音识别请求: 音频长度：%d, 第一个包：%d, 最后一个包：%d", task.data.size(), task.firstPacket,
-             task.lastPacket);
+    ESP_LOGD(TAG, "ASR Request: length %d, first: %d, last: %d", task.data.size(), task.firstPacket, task.lastPacket);
     if (task.firstPacket) {
         xEventGroupClearBits(_eventGroup, STT_TASK_COMPLETED_EVENT);
         while (!isConnected()) {
@@ -113,13 +108,13 @@ void DoubaoASR::recognize(DoubaoASRTask task) {
         }
         buildFullClientRequest();
         if (!sendBIN(_requestBuilder.data(), _requestBuilder.size())) {
-            ESP_LOGE(TAG, "发送语音识别请求包头失败");
+            ESP_LOGE(TAG, "Send header failed");
         }
         loop();
     }
     buildAudioOnlyRequest(task.data.data(), task.data.size(), task.lastPacket);
     if (!sendBIN(_requestBuilder.data(), _requestBuilder.size())) {
-        ESP_LOGE(TAG, "发送语音识别音频数据包失败");
+        ESP_LOGE(TAG, "Send audio payload failed");
     }
     loop();
     if (task.lastPacket) {
@@ -135,17 +130,16 @@ void DoubaoASR::recognize(DoubaoASRTask task) {
 void DoubaoASR::parseResponse(const uint8_t *response) {
     const uint8_t messageType = response[1] >> 4;
     const uint8_t *payload = response + 4;
-    ESP_LOGV(TAG, "收到websocket消息类型: %d", messageType);
+    ESP_LOGV(TAG, "Websocket msg type: %d", messageType);
     switch (messageType) {
         case 0b1001: {
-            // 服务端下发包含识别结果的 full server response
             const uint32_t payloadSize = readInt32(payload);
             payload += 4;
             std::string recognizeResult = readString(payload, payloadSize);
             JsonDocument jsonResult;
             const DeserializationError err = deserializeJson(jsonResult, recognizeResult);
             if (err) {
-                ESP_LOGE(TAG, "解析语音识别结果失败");
+                ESP_LOGE(TAG, "Parse ASR result failed");
                 return;
             }
             const String reqId = jsonResult["reqid"];
@@ -153,7 +147,7 @@ void DoubaoASR::parseResponse(const uint8_t *response) {
             const String message = jsonResult["message"];
             const int32_t sequence = jsonResult["sequence"];
             const JsonArray result = jsonResult["result"];
-            ESP_LOGD(TAG, "语音识别结果，sequence = %d, code = %d, message = %s, result size = %d",
+            ESP_LOGD(TAG, "ASR result, sequence = %d, code = %d, message = %s, size = %d",
                      sequence, code, message.c_str(), result.size());
             if (sequence < 0) {
                 xEventGroupSetBits(_eventGroup, STT_TASK_COMPLETED_EVENT);
@@ -161,12 +155,15 @@ void DoubaoASR::parseResponse(const uint8_t *response) {
             if (code == 1000 && result.size() > 0) {
                 for (const auto &item: result) {
                     String text = item["text"];
-                    LvglDisplay::updateChatText(_firstPacket, text.c_str());
+                    
+                    // Menampilkan hasil ucapan pengguna di OLED SSD1306
+                    Display::showChatMessage("User", text);
+
                     if (_firstPacket) {
                         _firstPacket = false;
                     }
                     if (sequence < 0) {
-                        ESP_LOGI(TAG, "语音识别结果: %s", text.c_str());
+                        ESP_LOGI(TAG, "ASR Final text: %s", text.c_str());
                         LLMTask task{};
                         task.message = static_cast<char *>(ps_malloc(sizeof(char) * text.length()));
                         task.length = text.length();
@@ -181,16 +178,14 @@ void DoubaoASR::parseResponse(const uint8_t *response) {
             break;
         }
         case 0b1111: {
-            // 服务端处理错误时下发的消息类型（如无效的消息格式，不支持的序列化方法等）
             const uint32_t errorCode = readInt32(payload);
             payload += 4;
             const uint32_t messageLength = readInt32(payload);
             payload += 4;
             const std::string errorMessage = readString(payload, messageLength);
-            ESP_LOGE(TAG, "语音识别失败: ");
-            ESP_LOGE(TAG, "  错误码 =  %u\n", errorCode);
-            ESP_LOGE(TAG, "错误描述 =  %s\n", errorMessage.c_str());
+            ESP_LOGE(TAG, "ASR Failed: code = %u, err = %s", errorCode, errorMessage.c_str());
             xEventGroupSetBits(_eventGroup, STT_TASK_COMPLETED_EVENT);
+            break;
         }
         default: {
             break;
@@ -198,7 +193,6 @@ void DoubaoASR::parseResponse(const uint8_t *response) {
     }
 }
 
-// 创建websocket连接
 void DoubaoASR::connect() {
     if (isConnected() || _isConnecting) return;
     _isConnecting = true;
