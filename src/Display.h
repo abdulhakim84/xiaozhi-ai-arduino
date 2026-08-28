@@ -10,7 +10,7 @@
 #define OLED_RESET    -1
 #define SCREEN_ADDRESS 0x3C
 
-// Default Pin I2C ESP32-S3
+// Pin I2C Default ESP32-S3
 #define DEFAULT_SDA_PIN 41
 #define DEFAULT_SCL_PIN 42
 
@@ -19,14 +19,15 @@ private:
     static Adafruit_SSD1306 display;
     static String currentStatus;
     static String chatMessage;
-
+    static String currentTime;
 
 public:
     static void begin(int sdaPin = DEFAULT_SDA_PIN, int sclPin = DEFAULT_SCL_PIN);
     static void updateState(const char* stateText);
     static void updateState(const String& stateText);
-    static void setBrightness(int percentage);
     static void showChatMessage(const String& role, const String& text);
+    static void updateTime(const char* timeStr);
+    static void setBrightness(int percentage);
     static void render();
     static void clear();
 };
