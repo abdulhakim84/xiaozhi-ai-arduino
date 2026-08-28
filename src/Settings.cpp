@@ -4,6 +4,7 @@
 #include <map>
 #include "ArduinoJson.h"
 #include "GlobalState.h"
+#include "Display.h" // Tambahkan sertakan Display.h
 
 Preferences Settings::preferences;
 String Settings::currentVoice;
@@ -11,8 +12,8 @@ String Settings::currentPersona;
 int Settings::currentScreenBrightness;
 double Settings::currentSpeakSpeedRatio;
 double Settings::currentSpeakVolumeRatio;
-std::map<std::string, std::string> Settings::voiceMap = std::map<std::string, std::string>(); // <声音，声音值>列表
-std::map<std::string, std::string> Settings::personaMap = std::map<std::string, std::string>(); // <人设，botId>列表
+std::map<std::string, std::string> Settings::voiceMap = std::map<std::string, std::string>();
+std::map<std::string, std::string> Settings::personaMap = std::map<std::string, std::string>();
 std::string Settings::doubaoAppId;
 std::string Settings::doubaoAccessToken;
 std::string Settings::cozeToken;
@@ -49,6 +50,9 @@ void Settings::begin() {
     wifiPassword = preferences.getString(SETTING_WIFI_PASSWORD, "").c_str();
     currentScreenBrightness = preferences.getInt(SETTING_SCREEN_BRIGHTNESS, 80);
     preferences.end();
+
+    // Set kontras OLED saat setup awal
+    Display::setBrightness(currentScreenBrightness);
 
     doubaoAppId = doc["doubao"]["appId"].as<std::string>();
     doubaoAccessToken = doc["doubao"]["accessToken"].as<std::string>();
@@ -94,7 +98,6 @@ void Settings::show() {
 String Settings::getCurrentVoice() {
     return currentVoice;
 }
-
 
 void Settings::setCurrentVoice(const String &voice) {
     currentVoice = voice;
@@ -176,7 +179,10 @@ int Settings::getScreenBrightness() {
 
 void Settings::setScreenBrightness(int brightness) {
     currentScreenBrightness = brightness;
-    analogWrite(8, static_cast<int>(currentScreenBrightness * 2.55));
+    
+    // Mengatur kontras OLED via I2C alih-alih PWM analogWrite pada Pin 8
+    Display::setBrightness(brightness);
+
     preferences.begin(SETTINGS_NAMESPACE);
     preferences.putInt(SETTING_SCREEN_BRIGHTNESS, brightness);
     preferences.end();
