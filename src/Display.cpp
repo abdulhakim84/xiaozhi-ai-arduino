@@ -44,6 +44,12 @@ void Display::clear() {
     display.display();
 }
 
+void Display::setBrightness(int percentage) {
+    uint8_t contrast = map(constrain(percentage, 0, 100), 0, 100, 0, 255);
+    display.ssd1306_command(SSD1306_SETCONTRAST);
+    display.ssd1306_command(contrast);
+}
+
 void Display::render() {
     display.clearDisplay();
 
