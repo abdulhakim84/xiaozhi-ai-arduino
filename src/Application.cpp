@@ -1,7 +1,7 @@
 #include "Application.h"
 #include <asr/DoubaoASR.h>
-
 #include "IOT.h"
+#include "Display.h" // Integrasi kelas Display pengganti LVGL
 
 static auto TAG = "Application";
 
@@ -16,6 +16,9 @@ Application::Application() {
 }
 
 void Application::begin() const {
+    // Inisialisasi Display SSD1306 (SDA = 41, SCL = 42)
+    Display::begin(41, 42);
+
     _audioPlayer->begin();
     _recordingManager->begin();
 }
