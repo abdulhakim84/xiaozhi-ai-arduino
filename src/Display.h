@@ -20,10 +20,12 @@ private:
     static String currentStatus;
     static String chatMessage;
 
+
 public:
     static void begin(int sdaPin = DEFAULT_SDA_PIN, int sclPin = DEFAULT_SCL_PIN);
     static void updateState(const char* stateText);
     static void updateState(const String& stateText);
+    static void setBrightness(int percentage);
     static void showChatMessage(const String& role, const String& text);
     static void render();
     static void clear();
